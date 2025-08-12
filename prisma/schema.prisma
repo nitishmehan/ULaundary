@@ -1,0 +1,151 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")      // Direct connection for migrations
+  directUrl = env("DIRECT_URL")        // Pooled for queries
+}
+
+enum UserRole {
+  STUDENT
+  LAUNDRY_STAFF
+  DELIVERY_PERSON
+  ADMIN              // Laundry owner - manages staff, views issues
+}
+
+enum LaundryStatus {
+  GENERATED          // Student created the laundry request
+  IN_PROCESS         // Staff acknowledged and washing
+  OUT_FOR_DELIVERY   // Washed and ready, assigned to delivery person
+  DELIVERED          // Student received the laundry
+}
+
+enum ProblemStatus {
+  REPORTED
+  RESOLVED
+  PENDING
+}
+
+// User model - can be student, staff, or delivery person
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  password  String   // Hashed password
+  role      UserRole
+  phone     String?
+  qrCode    String?  @unique // QR code on student's laundry bag
+  isVerified Boolean  @default(false) // Admin verification status
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Student-specific fields
+  hostelName      String?
+  roomNumber      String?
+  laundryNumber   Int?     // 1-4 for students in same room
+  
+  // Relations
+  laundryProcesses LaundryProcess[] @relation("StudentLaundries")
+  staffProcesses   LaundryProcess[] @relation("StaffLaundries")
+  deliveryAssignments LaundryProcess[] @relation("DeliveryPersonLaundries")
+  problems         Problem[]
+}
+
+// Main laundry transaction/process
+model LaundryProcess {
+  id              String         @id @default(uuid())
+  status          LaundryStatus  @default(GENERATED)
+  
+  // Student who created the laundry
+  studentId       String
+  student         User           @relation("StudentLaundries", fields: [studentId], references: [id])
+  
+  // Staff who processed it
+  staffId         String?
+  staff           User?          @relation("StaffLaundries", fields: [staffId], references: [id])
+  
+  // Delivery person assigned
+  deliveryPersonId String?
+  deliveryPerson   User?         @relation("DeliveryPersonLaundries", fields: [deliveryPersonId], references: [id])
+  
+  // Clothing quantities submitted by student
+  bedSheetQty       Int @default(0)
+  pillowCoverQty    Int @default(0)
+  towelQty          Int @default(0)
+  salwarQty         Int @default(0)
+  kurtaQty          Int @default(0)
+  lowerPyjamaQty    Int @default(0)
+  jacketQty         Int @default(0)
+  nikkarQty         Int @default(0)
+  jeansQty          Int @default(0)
+  tShirtQty         Int @default(0)
+  universityShirtQty Int @default(0)
+  universityPantQty Int @default(0)
+  civilPantQty      Int @default(0)
+  civilShirtQty     Int @default(0)
+  schoolSweaterQty  Int @default(0)
+  schoolCoatQty     Int @default(0)
+  skirtQty          Int @default(0)
+  dupattaQty        Int @default(0)
+  turbanQty         Int @default(0)
+  apronQty          Int @default(0)
+  whiteCoatQty      Int @default(0)
+  upperHoodieQty    Int @default(0)
+  smallBlanketQty   Int @default(0)
+  bigBlanketQty     Int @default(0)
+  
+  // Total count of all items
+  totalItems        Int @default(0)
+  
+  // Acknowledgments
+  staffVerified     Boolean @default(false)  // Staff verified bag contents match
+  washingCompleted  Boolean @default(false)  // Staff completed washing
+  studentReceived   Boolean @default(false)  // Student acknowledged receipt
+  
+  // Timestamps for each stage
+  createdAt                 DateTime  @default(now())
+  staffAcknowledgedAt       DateTime? // When staff verified bag contents
+  washingCompletedAt        DateTime? // When staff marked washing complete
+  outForDeliveryAt          DateTime? // When assigned to delivery person
+  deliveredAt               DateTime? // When student acknowledged receipt
+  
+  // Relations
+  problems        Problem[]
+  
+  updatedAt       DateTime  @updatedAt
+
+  @@index([studentId])
+  @@index([staffId])
+  @@index([deliveryPersonId])
+  @@index([status])
+  @@index([studentId, status])
+}
+
+// Problems/complaints reported during the process
+model Problem {
+  id                String        @id @default(uuid())
+  laundryProcessId  String
+  laundryProcess    LaundryProcess @relation(fields: [laundryProcessId], references: [id], onDelete: Cascade)
+  
+  reportedById      String
+  reportedBy        User          @relation(fields: [reportedById], references: [id])
+  
+  description       String
+  status            ProblemStatus @default(REPORTED)
+  resolution        String?       // Resolution notes
+  
+  createdAt         DateTime      @default(now())
+  resolvedAt        DateTime?
+  updatedAt         DateTime      @updatedAt
+
+  @@index([laundryProcessId])
+  @@index([reportedById])
+}
