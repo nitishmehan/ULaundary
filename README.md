@@ -108,7 +108,3 @@ npx prisma generate
 
 # Push schema changes to database
 npx prisma db push
-
-## License
-
-MIT
